@@ -9,17 +9,22 @@ const io = new Server(server);
 
 app.use(express.static(__dirname));
 
-const activeChats = new Map();
+const activeTrackers = new Map();
 
 io.on('connection', (socket) => {
-    socket.on('join-channel', (channelId) => {
-        if (!channelId) return;
+    // Menerima target channel / handle dari client (yang dibaca dari file JSON)
+    socket.on('join-stream', (target) => {
+        if (!target) return;
 
-        // Jika channel belum dipantau, buat instance baru
-        if (!activeChats.has(channelId)) {
+        const cleanTarget = target.replace('@', '');
+        socket.join(cleanTarget);
+        console.log(`OBS terhubung melacak channel: ${cleanTarget}`);
+
+        if (!activeTrackers.has(cleanTarget)) {
             try {
-                const isChannel = channelId.startsWith('UC');
-                const liveChat = new LiveChat(isChannel ? { channelId } : { liveId: channelId });
+                // Mendukung channelId (UC...) atau handle langsung
+                const isChannelId = cleanTarget.startsWith('UC');
+                const liveChat = new LiveChat(isChannelId ? { channelId: cleanTarget } : { channelId: cleanTarget });
 
                 liveChat.on("chat", (chatItem) => {
                     let role = 'user';
@@ -27,7 +32,7 @@ io.on('connection', (socket) => {
                     else if (chatItem.isModerator) role = 'moderator';
                     else if (chatItem.isMembership) role = 'member';
 
-                    io.to(channelId).emit('new-chat', {
+                    io.to(cleanTarget).emit('new-chat', {
                         id: chatItem.id,
                         username: chatItem.author.name,
                         avatar: chatItem.author.thumbnail.url,
@@ -40,17 +45,20 @@ io.on('connection', (socket) => {
                 liveChat.on("error", () => {});
                 liveChat.start().catch(() => {});
 
-                activeChats.set(channelId, liveChat);
-            } catch (e) {}
+                activeTrackers.set(cleanTarget, liveChat);
+            } catch (err) {
+                console.error("Gagal melacak live chat:", err);
+            }
         }
-
-        socket.join(channelId);
     });
 
+    // Simulasi Tes Manual (Tombol T di keyboard)
     socket.on('send-test-chat', (data) => {
         io.emit('new-chat', data);
     });
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+server.listen(PORT, () => {
+    console.log(`Server aktif di port ${PORT}`);
+});
