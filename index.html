@@ -6,131 +6,153 @@
     <title>VTuber Live Chat Overlay</title>
     <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
-    <!-- Socket.IO Client -->
     <script src="/socket.io/socket.io.js"></script>
 </head>
 <body>
 
     <div id="chat-container"></div>
 
-<script src="/socket.io/socket.io.js"></script>
-<script>
-    const socket = io();
-    const chatContainer = document.getElementById('chat-container');
+    <script>
+        const socket = io();
+        const chatContainer = document.getElementById('chat-container');
 
-    // Mengambil ID dari URL Parameter (contoh: ?id=UC_x5XG1OV2P6uZZ5FSM9Ttw)
-    const urlParams = new URLSearchParams(window.location.search);
-    const channelId = urlParams.get('id') || 'UC_x5XG1OV2P6uZZ5FSM9Ttw'; // Default ID jika kosong
+        // Menyimpan aset ikon default (bisa ditimpa lewat file JSON)
+        let iconAssets = [
+            'https://lh3.googleusercontent.com/d/FILE_ID_IKON_1',
+            'https://lh3.googleusercontent.com/d/FILE_ID_IKON_2',
+            'https://lh3.googleusercontent.com/d/FILE_ID_IKON_3'
+        ];
 
-    // Kirim ID ke server begitu OBS terkoneksi
-    socket.emit('join-channel', channelId);
+        // Membaca URL Config JSON dari OBS parameter (Contoh: ?config=URL_JSON_KAMU)
+        const urlParams = new URLSearchParams(window.location.search);
+        const configUrl = urlParams.get('config');
 
-    const iconAssets = [
-        'https://lh3.googleusercontent.com/d/FILE_ID_IKON_1',
-        'https://lh3.googleusercontent.com/d/FILE_ID_IKON_2',
-        'https://lh3.googleusercontent.com/d/FILE_ID_IKON_3'
-    ];
+        async function initOverlay() {
+            let targetChannel = 'UC_x5XG1OV2P6uZZ5FSM9Ttw'; // Default fallback jika tanpa config
 
-    const topPositions = ['top-mid', 'top-right'];
-    const bottomPositions = ['bottom-mid', 'bottom-right'];
-
-    function getWeightedRandomCount() {
-        const rand = Math.random();
-        if (rand < 0.45) return 0;
-        if (rand < 0.90) return 1;
-        return 2;
-    }
-
-    socket.on('new-chat', (data) => {
-        const item = document.createElement('div');
-        item.className = 'chat-item';
-        
-        let isSpecial = false;
-        let roleClass = '';
-        
-        if (data.role !== 'user') {
-            isSpecial = true;
-            item.classList.add('special-role');
-            roleClass = data.role;
-        }
-
-        let badgeHtml = isSpecial 
-            ? `<img class="decor-fixed-br" src="${data.badgeUrl || 'https://cdn-icons-png.flaticon.com/512/616/616490.png'}" alt="${data.role}">` 
-            : '';
-
-        item.innerHTML = `
-            <span class="username ${roleClass}">${data.username}</span>
-            <img class="avatar" src="${data.avatar}" alt="avatar">
-            <div class="bubble">
-                <span class="message">${data.message}</span>
-                ${badgeHtml}
-            </div>
-        `;
-
-        chatContainer.appendChild(item);
-
-        if (!isSpecial) {
-            applyDecorationToBubble(item.querySelector('.bubble'));
-        }
-
-        if (chatContainer.children.length > 8) {
-            chatContainer.removeChild(chatContainer.firstChild);
-        }
-    });
-
-    function applyDecorationToBubble(bubble) {
-        const count = getWeightedRandomCount();
-        if (count === 0) return;
-
-        let availableIcons = [...iconAssets];
-        let availableTop = [...topPositions];
-        let availableBottom = [...bottomPositions];
-        let isFirstTop = Math.random() < 0.5;
-
-        for (let i = 0; i < count; i++) {
-            if (availableIcons.length === 0) break;
-
-            const iconIndex = Math.floor(Math.random() * availableIcons.length);
-            const chosenIcon = availableIcons.splice(iconIndex, 1)[0];
-
-            let chosenPos = '';
-            const useTop = (i === 0) ? isFirstTop : !isFirstTop;
-
-            if (useTop && availableTop.length > 0) {
-                chosenPos = availableTop.splice(Math.floor(Math.random() * availableTop.length), 1)[0];
-            } else if (availableBottom.length > 0) {
-                chosenPos = availableBottom.splice(Math.floor(Math.random() * availableBottom.length), 1)[0];
+            if (configUrl) {
+                try {
+                    const response = await fetch(configUrl);
+                    const config = await response.json();
+                    
+                    if (config.handle || config.channelId) {
+                        targetChannel = config.handle || config.channelId;
+                    }
+                    if (config.icons && Array.isArray(config.icons)) {
+                        iconAssets = config.icons;
+                    }
+                } catch (err) {
+                    console.error("Gagal memuat file konfigurasi JSON:", err);
+                }
             }
 
-            if (!chosenPos) break;
-
-            const decorImg = document.createElement('img');
-            decorImg.src = chosenIcon;
-            decorImg.classList.add('chat-decor', chosenPos);
-            decorImg.style.transform += ` rotate(${(Math.random() * 30 - 15).toFixed(1)}deg)`;
-
-            bubble.appendChild(decorImg);
+            // Sambungkan ke server untuk melacak channel tersebut
+            socket.emit('join-stream', targetChannel);
         }
-    }
 
-    // SIMULASI TES DENGAN TOMBOL 'T'
-    window.addEventListener('keydown', (e) => {
-        if (e.key === 't' || e.key === 'T') {
-            const roles = ['user', 'moderator', 'member', 'owner'];
-            const selectedRole = roles[Math.floor(Math.random() * roles.length)];
-            const names = { user: 'PenontonSetia', moderator: 'Mod_Keren', member: 'SultanMember', owner: 'AriaCh_VTuber' };
-            const messages = ["You'll never catch me 🏃💨", "Halo semuanya, mohon tertib ya! 🛡️", "Semangat live stream-nya! ✨⭐", "Makasih yang udah mampir! 💖"];
+        initOverlay();
 
-            socket.emit('send-test-chat', {
-                id: Date.now(),
-                username: names[selectedRole],
-                avatar: `https://ui-avatars.com/api/?name=${names[selectedRole]}&background=random&color=fff`,
-                message: messages[Math.floor(Math.random() * messages.length)],
-                role: selectedRole,
-                badgeUrl: ''
-            });
+        const topPositions = ['top-mid', 'top-right'];
+        const bottomPositions = ['bottom-mid', 'bottom-right'];
+
+        function getWeightedRandomCount() {
+            const rand = Math.random();
+            if (rand < 0.45) return 0;
+            if (rand < 0.90) return 1;
+            return 2;
         }
-    });
-</script>
+
+        socket.on('new-chat', (data) => {
+            const item = document.createElement('div');
+            item.className = 'chat-item';
+            
+            let isSpecial = false;
+            let roleClass = '';
+            
+            if (data.role !== 'user') {
+                isSpecial = true;
+                item.classList.add('special-role');
+                roleClass = data.role;
+            }
+
+            let badgeHtml = isSpecial 
+                ? `<img class="decor-fixed-br" src="${data.badgeUrl || 'https://cdn-icons-png.flaticon.com/512/616/616490.png'}" alt="${data.role}">` 
+                : '';
+
+            item.innerHTML = `
+                <span class="username ${roleClass}">${data.username}</span>
+                <img class="avatar" src="${data.avatar}" alt="avatar">
+                <div class="bubble">
+                    <span class="message">${data.message}</span>
+                    ${badgeHtml}
+                </div>
+            `;
+
+            chatContainer.appendChild(item);
+
+            // Stiker acak HANYA untuk penonton biasa
+            if (!isSpecial) {
+                applyDecorationToBubble(item.querySelector('.bubble'));
+            }
+
+            if (chatContainer.children.length > 8) {
+                chatContainer.removeChild(chatContainer.firstChild);
+            }
+        });
+
+        function applyDecorationToBubble(bubble) {
+            const count = getWeightedRandomCount();
+            if (count === 0 || iconAssets.length === 0) return;
+
+            let availableIcons = [...iconAssets];
+            let availableTop = [...topPositions];
+            let availableBottom = [...bottomPositions];
+            let isFirstTop = Math.random() < 0.5;
+
+            for (let i = 0; i < count; i++) {
+                if (availableIcons.length === 0) break;
+
+                const iconIndex = Math.floor(Math.random() * availableIcons.length);
+                const chosenIcon = availableIcons.splice(iconIndex, 1)[0];
+
+                let chosenPos = '';
+                const useTop = (i === 0) ? isFirstTop : !isFirstTop;
+
+                if (useTop && availableTop.length > 0) {
+                    chosenPos = availableTop.splice(Math.floor(Math.random() * availableTop.length), 1)[0];
+                } else if (availableBottom.length > 0) {
+                    chosenPos = availableBottom.splice(Math.floor(Math.random() * availableBottom.length), 1)[0];
+                }
+
+                if (!chosenPos) break;
+
+                const decorImg = document.createElement('img');
+                decorImg.src = chosenIcon;
+                decorImg.classList.add('chat-decor', chosenPos);
+                decorImg.style.transform += ` rotate(${(Math.random() * 30 - 15).toFixed(1)}deg)`;
+
+                bubble.appendChild(decorImg);
+            }
+        }
+
+        // SIMULASI TES MANUAL: Tekan tombol 'T' di keyboard komputer
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 't' || e.key === 'T') {
+                const roles = ['user', 'moderator', 'member', 'owner'];
+                const selectedRole = roles[Math.floor(Math.random() * roles.length)];
+                const names = { user: 'PenontonSetia', moderator: 'Mod_Keren', member: 'SultanMember', owner: 'AriaCh_VTuber' };
+                const messages = ["You'll never catch me 🏃💨", "Halo semuanya, mohon tertib ya! 🛡️", "Semangat live stream-nya! ✨⭐", "Makasih yang udah mampir! 💖"];
+
+                socket.emit('send-test-chat', {
+                    id: Date.now(),
+                    username: names[selectedRole],
+                    avatar: `https://ui-avatars.com/api/?name=${names[selectedRole]}&background=random&color=fff`,
+                    message: messages[Math.floor(Math.random() * messages.length)],
+                    role: selectedRole,
+                    badgeUrl: ''
+                });
+            }
+        });
+    </script>
 </body>
 </html>
